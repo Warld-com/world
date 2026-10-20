@@ -1,11 +1,30 @@
-<div align="center">
+# warld - Short Video & Social Platform
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+A high-performance modern web & mobile application built with React, Vite, Tailwind CSS, and Firebase.
 
-  <h1>Built with AI Studio</h2>
+## 🚀 GitHub Pages Auto-Deployment (Zero Setup)
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+This repository includes a pre-configured GitHub Actions workflow located at `.github/workflows/deploy.yml`.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+### How to enable GitHub Pages in 1 Click:
+1. Push this repository to your GitHub account (`main` or `master` branch).
+2. Go to your repository **Settings** on GitHub.
+3. Click on **Pages** in the left sidebar.
+4. Under **Build and deployment > Source**, select **GitHub Actions**.
+5. That's it! GitHub will automatically build and publish your website link (e.g. `https://<username>.github.io/<repo-name>/`).
 
-</div>
+## 🛠️ Local Development
+
+To run the application locally:
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Run the development server
+npm run dev
+
+# 3. Build for production
+npm run build
+```
+https://warld-sdk.github.io/world/
