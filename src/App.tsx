@@ -575,14 +575,14 @@ function SplashScreen() {
     <motion.div 
       initial={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black overflow-hidden select-none"
+      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black overflow-hidden select-none"
     >
       {/* Background ambient light effects */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-500/10 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-1/4 left-1/2 -translate-x-1/2 translate-y-1/2 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
 
       {/* Styled 3D Neon App Logo Container */}
-      <div className="relative w-48 h-48 flex items-center justify-center mb-6">
+      <div className="relative w-48 h-48 flex items-center justify-center">
         {/* Outer orbital rings */}
         <motion.div
           animate={{ rotate: 360 }}
@@ -619,30 +619,6 @@ function SplashScreen() {
           />
         </motion.div>
       </div>
-
-      {/* Main App Title */}
-      <motion.div
-        initial={{ scale: 0.85, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }}
-        className="flex flex-col items-center"
-      >
-        <span className="text-white text-5xl font-black tracking-tight bg-gradient-to-b from-white via-zinc-100 to-zinc-400 bg-clip-text text-transparent">
-          warld
-        </span>
-        <span className="mt-1.5 text-xs text-cyan-400 font-bold uppercase tracking-[0.3em] opacity-80">
-          Global Short Videos
-        </span>
-      </motion.div>
-
-      {/* Loading anim subtitle */}
-      <motion.div
-        animate={{ opacity: [0.3, 1, 0.3] }}
-        transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
-        className="mt-8 text-zinc-500 text-[10px] uppercase tracking-[0.2em] font-black"
-      >
-        Initializing global feed...
-      </motion.div>
 
       {/* Facebook/TikTok-style signature branding at the absolute bottom of the screen */}
       <div className="absolute bottom-10 flex flex-col items-center justify-center space-y-1 z-10">
@@ -5058,17 +5034,23 @@ function AuthForm({ type: initialType, onClose, isBlocking = false }: { type: 'l
         {/* Top Header */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <button 
-              type="button"
-              onClick={onClose} 
-              className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors active:scale-95 cursor-pointer"
-              title={appLanguage === 'bn' ? 'আগের পেজে ফিরে যান' : 'Go back'}
-            >
-              <X className="w-4 h-4" />
-            </button>
+            {!isBlocking ? (
+              <button 
+                type="button"
+                onClick={onClose} 
+                className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors active:scale-95 cursor-pointer"
+                title={appLanguage === 'bn' ? 'আগের পেজে ফিরে যান' : 'Go back'}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            ) : (
+              <div className="w-8 h-8 flex items-center justify-center">
+                <img src={appBrandLogo || "./logo.png"} alt="warld" className="w-7 h-7 rounded-lg object-cover" />
+              </div>
+            )}
             <h2 className="text-white text-base font-black uppercase tracking-widest text-center">
               {type === 'login' 
-                ? (appLanguage === 'bn' ? 'স্বাগতম' : 'Welcome') 
+                ? (appLanguage === 'bn' ? 'লগইন করুন' : 'Welcome') 
                 : type === 'signup' 
                   ? (appLanguage === 'bn' ? 'অ্যাকাউন্ট খুলুন' : 'Join Us') 
                   : (appLanguage === 'bn' ? 'পাসওয়ার্ড রিকভারি' : 'Reset')}
@@ -5288,24 +5270,22 @@ function AuthForm({ type: initialType, onClose, isBlocking = false }: { type: 'l
           </div>
         )}
 
-        {/* Guest Exploration Option */}
-        <div className="pt-3 pb-1 text-center">
-          <button
-            type="button"
-            onClick={() => {
-              hapticFeedback('light');
-              try {
-                sessionStorage.setItem('guest_browsing', 'true');
-              } catch {}
-              window.dispatchEvent(new CustomEvent('guest-browsing'));
-              if (onClose) onClose();
-            }}
-            className="text-[11px] text-zinc-400 hover:text-white font-bold uppercase tracking-wider py-1.5 px-4 rounded-xl bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800 active:scale-95 transition-all inline-flex items-center gap-1.5"
-          >
-            <span>👀</span>
-            <span>{appLanguage === 'bn' ? 'গেস্ট হিসেবে ভিডিও দেখুন →' : 'Explore Videos as Guest →'}</span>
-          </button>
-        </div>
+        {/* Guest Exploration Option (only when not blocking) */}
+        {!isBlocking && (
+          <div className="pt-3 pb-1 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                hapticFeedback('light');
+                if (onClose) onClose();
+              }}
+              className="text-[11px] text-zinc-400 hover:text-white font-bold uppercase tracking-wider py-1.5 px-4 rounded-xl bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800 active:scale-95 transition-all inline-flex items-center gap-1.5"
+            >
+              <span>✕</span>
+              <span>{appLanguage === 'bn' ? 'বন্ধ করুন' : 'Close'}</span>
+            </button>
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -19116,6 +19096,10 @@ function WorldApp() {
           </div>
         )}
         <main className="flex-1 overflow-hidden relative">
+          {!user ? (
+            <AuthForm type="login" isBlocking={true} />
+          ) : (
+            <>
               {activeTab === 'home' && (
             <Feed 
               pendingUploads={pendingUploads} 
@@ -19230,10 +19214,12 @@ function WorldApp() {
               </div>
             )
           )}
+            </>
+          )}
         </main>
 
         <AnimatePresence>
-          {isNavVisible && (
+          {isNavVisible && !!user && (
             <motion.div
               initial={{ y: 80 }}
               animate={{ y: 0 }}
