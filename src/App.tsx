@@ -141,6 +141,7 @@ import {
   limit,
   arrayUnion
 } from 'firebase/firestore';
+import { useTheme, ThemeProvider } from './ThemeContext.tsx';
 
 // Deduplicate helper by ID property to prevent key collisions across React maps
 function deduplicateById(arr: any[]): any[] {
@@ -5313,8 +5314,8 @@ function AuthForm({ type: initialType, onClose, isBlocking = false }: { type: 'l
 function Settings({ 
   onClose, 
   isOffline, 
-  isDarkMode, 
-  onToggleTheme, 
+  isDarkMode: propDarkMode, 
+  onToggleTheme: propToggleTheme, 
   isProMode = false, 
   onToggleProMode, 
   onShowProDashboard, 
@@ -5329,8 +5330,8 @@ function Settings({
 }: { 
   onClose: () => void, 
   isOffline?: boolean, 
-  isDarkMode: boolean, 
-  onToggleTheme: () => void, 
+  isDarkMode?: boolean, 
+  onToggleTheme?: () => void, 
   isProMode?: boolean, 
   onToggleProMode?: (v: boolean) => void, 
   onShowProDashboard?: () => void, 
@@ -5344,6 +5345,23 @@ function Settings({
   checkForAppUpdates?: (isManual: boolean) => Promise<void>
 }) {
   const { user, logout, updateUserProfile, sessionId } = useAuth();
+  const { isDarkMode: ctxDarkMode, toggleTheme: ctxToggleTheme, setTheme: ctxSetTheme, theme: currentTheme } = useTheme();
+  
+  const isDarkMode = propDarkMode !== undefined ? propDarkMode : ctxDarkMode;
+  const onToggleTheme = () => {
+    if (propToggleTheme) {
+      propToggleTheme();
+    } else {
+      ctxToggleTheme();
+    }
+  };
+  const setAppTheme = (newTheme: 'dark' | 'light') => {
+    ctxSetTheme(newTheme);
+    if (propToggleTheme && ((newTheme === 'dark' && !isDarkMode) || (newTheme === 'light' && isDarkMode))) {
+      propToggleTheme();
+    }
+  };
+
   const [localIsProMode, setLocalIsProMode] = useState(isProMode);
 
   const isAdmin = !!(
@@ -7430,7 +7448,7 @@ function Settings({
                         
                         {/* Theme Toggle Switch Row */}
                         <div className="py-3.5 first:pt-0">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center space-x-3 text-left">
                               <div className={cn(
                                 "w-9 h-9 rounded-2xl flex items-center justify-center transition-colors border",
@@ -7476,6 +7494,63 @@ function Settings({
                               >
                                 {isDarkMode ? <Moon className="w-3.5 h-3.5 fill-current" /> : <Sun className="w-3.5 h-3.5 fill-current" />}
                               </span>
+                            </button>
+                          </div>
+
+                          {/* Theme Selector Cards */}
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => setAppTheme('dark')}
+                              className={cn(
+                                "p-3 rounded-2xl border text-left transition-all flex items-center space-x-2.5 cursor-pointer active:scale-98",
+                                isDarkMode 
+                                  ? "bg-zinc-950 border-[#FF4B91] ring-1 ring-pink-500/50 shadow-md" 
+                                  : "bg-zinc-100/70 border-zinc-200 text-zinc-600 hover:bg-zinc-200/60"
+                              )}
+                            >
+                              <div className={cn(
+                                "w-7 h-7 rounded-xl flex items-center justify-center text-xs",
+                                isDarkMode ? "bg-purple-500/20 text-purple-300" : "bg-zinc-200 text-zinc-500"
+                              )}>
+                                <Moon className="w-3.5 h-3.5 fill-current" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <span className={cn("text-[11px] font-black block leading-none", isDarkMode ? "text-white" : "text-zinc-700")}>
+                                  {appLanguage === 'bn' ? 'ডার্ক মোড' : 'Dark Mode'}
+                                </span>
+                                <span className="text-[9px] text-zinc-500 block mt-0.5 truncate">
+                                  {appLanguage === 'bn' ? 'কালো ব্যাকগ্রাউন্ড' : 'OLED Black'}
+                                </span>
+                              </div>
+                              {isDarkMode && <div className="w-2 h-2 rounded-full bg-[#FF4B91] shrink-0" />}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setAppTheme('light')}
+                              className={cn(
+                                "p-3 rounded-2xl border text-left transition-all flex items-center space-x-2.5 cursor-pointer active:scale-98",
+                                !isDarkMode 
+                                  ? "bg-white border-[#FF4B91] ring-1 ring-pink-500/50 shadow-md text-zinc-900" 
+                                  : "bg-zinc-950/40 border-zinc-800 text-zinc-400 hover:bg-zinc-800/40"
+                              )}
+                            >
+                              <div className={cn(
+                                "w-7 h-7 rounded-xl flex items-center justify-center text-xs",
+                                !isDarkMode ? "bg-amber-500/20 text-amber-500" : "bg-zinc-800 text-zinc-400"
+                              )}>
+                                <Sun className="w-3.5 h-3.5 fill-current" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <span className={cn("text-[11px] font-black block leading-none", !isDarkMode ? "text-zinc-900" : "text-zinc-300")}>
+                                  {appLanguage === 'bn' ? 'লাইট মোড' : 'Light Mode'}
+                                </span>
+                                <span className="text-[9px] text-zinc-500 block mt-0.5 truncate">
+                                  {appLanguage === 'bn' ? 'উজ্জ্বল ব্যাকগ্রাউন্ড' : 'Clean & Bright'}
+                                </span>
+                              </div>
+                              {!isDarkMode && <div className="w-2 h-2 rounded-full bg-[#FF4B91] shrink-0" />}
                             </button>
                           </div>
                         </div>
@@ -18121,26 +18196,15 @@ function WorldApp() {
     });
   }, []);
 
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const saved = localStorage.getItem('world_theme');
-    return saved ? saved === 'dark' : true;
-  });
-
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.remove('light');
-      document.documentElement.classList.add('dark');
-      document.body.style.backgroundColor = '#000000';
-      document.body.style.color = '#ffffff';
-      localStorage.setItem('world_theme', 'dark');
+  const { isDarkMode, toggleTheme } = useTheme();
+  const setIsDarkMode = (val: boolean | ((prev: boolean) => boolean)) => {
+    if (typeof val === 'function') {
+      const next = val(isDarkMode);
+      if (next !== isDarkMode) toggleTheme();
     } else {
-      document.documentElement.classList.add('light');
-      document.documentElement.classList.remove('dark');
-      document.body.style.backgroundColor = '#f4f4f5';
-      document.body.style.color = '#09090b';
-      localStorage.setItem('world_theme', 'light');
+      if (val !== isDarkMode) toggleTheme();
     }
-  }, [isDarkMode]);
+  };
 
   // Sync to local storage
   useEffect(() => {
@@ -19359,9 +19423,11 @@ function EditPostModal({ video, onClose }: { video: any, onClose: () => void }) 
 
 export default function App() {
   return (
-    <AuthProvider>
-      <WorldApp />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <WorldApp />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

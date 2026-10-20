@@ -1010,8 +1010,8 @@ Keep answers relatively concise, encouraging, and engaging. Never talk down to t
   });
 
   // Google Search Console Verification Endpoint
-  app.get('/googleekHyFxotj08S1-8xlbKnmFJ9oZRURBY4ChRPOYhiLpw.html', (req, res) => {
-    res.type('text/html').send('google-site-verification: googleekHyFxotj08S1-8xlbKnmFJ9oZRURBY4ChRPOYhiLpw.html');
+  app.get('/googleTVBE6jd0kpEvfEa8Dk-dj_LilsaHnmBuAFsGDMMdLX0.html', (req, res) => {
+    res.type('text/html').send('google-site-verification: googleTVBE6jd0kpEvfEa8Dk-dj_LilsaHnmBuAFsGDMMdLX0.html');
   });
 
   // Static files and Vite integration

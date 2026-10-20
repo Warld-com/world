@@ -2,6 +2,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import {ErrorBoundary} from './ErrorBoundary.tsx';
+import { ThemeProvider } from './ThemeContext.tsx';
 import './index.css';
 
 // Suppress benign Vite/WebSocket errors and user-cancelled auth popups that occur in this environment
@@ -60,11 +61,12 @@ if ('serviceWorker' in navigator) {
     }
   });
 }
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </ErrorBoundary>
   </StrictMode>,
 );
