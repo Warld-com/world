@@ -675,6 +675,80 @@ function VideoPlayer({ video, isActive, isOptimistic, isMuted, setIsMuted }: { v
   const commentInputRef = useRef<HTMLInputElement>(null);
   const [creatorInfo, setCreatorInfo] = useState<{ profilePhoto?: string; fullName?: string } | null>(null);
 
+  // Playback Progress & Scrubbing State
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [scrubPreviewTime, setScrubPreviewTime] = useState(0);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+
+  const handleScrubStart = (clientX: number) => {
+    if (!videoRef.current || !progressBarRef.current) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const total = duration || videoRef.current.duration || 0;
+    const newTime = ratio * total;
+    setIsScrubbing(true);
+    setScrubPreviewTime(newTime);
+    setCurrentTime(newTime);
+    hapticFeedback('light');
+  };
+
+  const handleScrubMove = (clientX: number) => {
+    if (!isScrubbing || !progressBarRef.current || !videoRef.current) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const total = duration || videoRef.current.duration || 0;
+    const newTime = ratio * total;
+    setScrubPreviewTime(newTime);
+    setCurrentTime(newTime);
+    try {
+      videoRef.current.currentTime = newTime;
+    } catch (e) {}
+  };
+
+  const handleScrubEnd = () => {
+    if (isScrubbing && videoRef.current) {
+      try {
+        videoRef.current.currentTime = scrubPreviewTime;
+      } catch (e) {}
+      setIsScrubbing(false);
+      hapticFeedback('medium');
+    }
+  };
+
+  useEffect(() => {
+    if (!isScrubbing) return;
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      handleScrubMove(clientX);
+    };
+    const onEnd = () => {
+      handleScrubEnd();
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onEnd);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onEnd);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+    };
+  }, [isScrubbing, scrubPreviewTime, duration]);
+
+  const formatPlaybackTime = (seconds: number) => {
+    if (isNaN(seconds) || seconds < 0) return '0:00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const currentProgress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
   useEffect(() => {
     if (!video.userId) return;
     const unsubCreator = onSnapshot(doc(db, 'users', video.userId), (docSnap) => {
@@ -1459,11 +1533,27 @@ function VideoPlayer({ video, isActive, isOptimistic, isMuted, setIsMuted }: { v
             muted={isMuted}
             loop
             preload="auto"
-            onLoadedData={() => {
+            onLoadedMetadata={(e) => {
+              if (e.currentTarget.duration) {
+                setDuration(e.currentTarget.duration);
+              }
+            }}
+            onTimeUpdate={(e) => {
+              if (!isScrubbing) {
+                setCurrentTime(e.currentTarget.currentTime);
+                if (!duration && e.currentTarget.duration) {
+                  setDuration(e.currentTarget.duration);
+                }
+              }
+            }}
+            onLoadedData={(e) => {
               setIsPlaying(true);
               setRetryCount(0); // Reset retry count on success
               if (videoRef.current && video.speed) {
                 videoRef.current.playbackRate = video.speed;
+              }
+              if (e.currentTarget.duration) {
+                setDuration(e.currentTarget.duration);
               }
             }}
             onError={handleMediaError}
@@ -2214,6 +2304,56 @@ function VideoPlayer({ video, isActive, isOptimistic, isMuted, setIsMuted }: { v
           </div>
         )}
       </AnimatePresence>
+
+      {/* Dynamic Video Playback Scrubbing Progress Bar */}
+      {isVideo && (
+        <div 
+          ref={progressBarRef}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            handleScrubStart(e.clientX);
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            if (e.touches && e.touches[0]) {
+              handleScrubStart(e.touches[0].clientX);
+            }
+          }}
+          className="absolute bottom-0 left-0 right-0 z-40 h-6 flex items-end cursor-pointer select-none group touch-none"
+        >
+          {/* Hit area and background track */}
+          <div className="w-full h-1 group-hover:h-2 transition-all duration-150 bg-white/25 relative overflow-visible">
+            {/* Played progress fill */}
+            <div 
+              style={{ width: `${Math.min(100, Math.max(0, currentProgress))}%` }}
+              className="h-full bg-gradient-to-r from-pink-500 via-[#FF4B91] to-purple-500 relative transition-all duration-75"
+            >
+              {/* Scrubbing Thumb Indicator */}
+              <div 
+                className={cn(
+                  "absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 rounded-full bg-white border-2 border-[#FF4B91] shadow-[0_0_10px_rgba(255,75,145,0.9)] transition-all",
+                  isScrubbing ? "w-4 h-4 scale-125 opacity-100" : "w-2.5 h-2.5 opacity-0 group-hover:opacity-100 group-hover:scale-100"
+                )}
+              />
+            </div>
+
+            {/* Scrub Preview Time Tooltip */}
+            {isScrubbing && (
+              <div 
+                style={{ 
+                  left: `${Math.min(90, Math.max(10, currentProgress))}%`,
+                  transform: 'translateX(-50%)'
+                }}
+                className="absolute bottom-7 bg-black/90 text-white font-mono font-bold text-[10px] px-2.5 py-1 rounded-xl border border-pink-500/40 shadow-2xl backdrop-blur-md flex items-center gap-1.5 whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95 duration-100"
+              >
+                <span className="text-pink-400 font-extrabold">{formatPlaybackTime(scrubPreviewTime)}</span>
+                <span className="text-gray-500">/</span>
+                <span className="text-gray-300">{formatPlaybackTime(duration)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -5270,22 +5410,24 @@ function AuthForm({ type: initialType, onClose, isBlocking = false }: { type: 'l
           </div>
         )}
 
-        {/* Guest Exploration Option (only when not blocking) */}
-        {!isBlocking && (
-          <div className="pt-3 pb-1 text-center">
-            <button
-              type="button"
-              onClick={() => {
-                hapticFeedback('light');
-                if (onClose) onClose();
-              }}
-              className="text-[11px] text-zinc-400 hover:text-white font-bold uppercase tracking-wider py-1.5 px-4 rounded-xl bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800 active:scale-95 transition-all inline-flex items-center gap-1.5"
-            >
-              <span>✕</span>
-              <span>{appLanguage === 'bn' ? 'বন্ধ করুন' : 'Close'}</span>
-            </button>
-          </div>
-        )}
+        {/* Guest Exploration Option */}
+        <div className="pt-3 pb-1 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              hapticFeedback('light');
+              try {
+                sessionStorage.setItem('guest_browsing', 'true');
+              } catch {}
+              window.dispatchEvent(new CustomEvent('guest-browsing'));
+              if (onClose) onClose();
+            }}
+            className="text-[11px] text-zinc-400 hover:text-white font-bold uppercase tracking-wider py-2 px-4 rounded-xl bg-zinc-900/80 hover:bg-zinc-850 border border-zinc-800 active:scale-95 transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
+          >
+            <span>👀</span>
+            <span>{appLanguage === 'bn' ? 'লগইন ছাড়া সরাসরি ভিডিও ও ডেটা দেখুন →' : 'Explore Videos & Data Without Login →'}</span>
+          </button>
+        </div>
       </div>
     </motion.div>
   );
@@ -5368,6 +5510,7 @@ function Settings({
   const [firebaseSyncEnabled, setFirebaseSyncEnabled] = useState(() => localStorage.getItem('world_firebase_sync') !== 'false');
   const [serverChannelEnabled, setServerChannelEnabled] = useState(() => localStorage.getItem('world_server_channel') !== 'false');
   const [googleCDNEnabled, setGoogleCDNEnabled] = useState(() => localStorage.getItem('world_google_cdn') !== 'false');
+  const [permFeedback, setPermFeedback] = useState<string | null>(null);
 
   // local states for app update inside the settings sub panel
   const [adminUpdateVersion, setAdminUpdateVersion] = useState('');
@@ -5460,6 +5603,29 @@ function Settings({
   const [quizScore, setQuizScore] = useState(0);
   const [quizSelectedOption, setQuizSelectedOption] = useState<number | null>(null);
   const [quizAnswered, setQuizAnswered] = useState(false);
+
+  // Handle phone back button inside Settings & sub-settings
+  useEffect(() => {
+    try {
+      window.history.pushState({ screen: 'settings' }, '');
+    } catch (e) {}
+
+    const handlePop = (e: PopStateEvent) => {
+      if (settingsSub !== 'none') {
+        setSettingsSub('none');
+        try { window.history.pushState({ screen: 'settings' }, ''); } catch (err) {}
+      } else if (currentSection !== 'menu') {
+        setCurrentSection('menu');
+        try { window.history.pushState({ screen: 'settings' }, ''); } catch (err) {}
+      } else {
+        onClose();
+      }
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => {
+      window.removeEventListener('popstate', handlePop);
+    };
+  }, [settingsSub, currentSection, onClose]);
 
   const quizQuestions = [
     {
@@ -8799,6 +8965,20 @@ function Settings({
                         </span>
                       </div>
 
+                      {/* Realtime Permission Feedback Banner */}
+                      {permFeedback && (
+                        <div className="p-3 bg-pink-500/15 border border-pink-500/30 rounded-2xl flex items-center justify-between animate-in fade-in slide-in-from-top duration-200">
+                          <p className="text-[11px] font-bold text-pink-300 leading-snug">{permFeedback}</p>
+                          <button
+                            type="button"
+                            onClick={() => setPermFeedback(null)}
+                            className="p-1 hover:bg-white/10 rounded-full text-pink-400 shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-2 gap-2.5">
                         {/* Camera Trigger */}
                         <button
@@ -8808,9 +8988,9 @@ function Settings({
                             try {
                               const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                               s.getTracks().forEach(t => t.stop());
-                              alert(appLanguage === 'bn' ? '✅ ক্যামেরা অনুমতি সফলভাবে চালু হয়েছে!' : '✅ Camera permission granted successfully!');
+                              setPermFeedback(appLanguage === 'bn' ? '✅ ক্যামেরা অনুমতি সফলভাবে চালু হয়েছে!' : '✅ Camera permission granted successfully!');
                             } catch (err: any) {
-                              alert(appLanguage === 'bn' ? '⚠️ ক্যামেরা পারমিশন দেওয়া সম্ভব হয়নি। অনুগ্রহ করে ফোনের Settings > Apps > Chrome/warld > Permissions থেকে Camera "Allow" করুন।' : '⚠️ Camera permission denied. Please allow camera in phone settings.');
+                              setPermFeedback(appLanguage === 'bn' ? '⚠️ ক্যামেরা পারমিশন দেওয়া সম্ভব হয়নি। অনুগ্রহ করে ফোনের Settings > Apps > warld > Permissions থেকে Camera "Allow" করুন।' : '⚠️ Camera permission denied. Please allow camera in phone settings.');
                             }
                           }}
                           className="p-3 bg-zinc-900/90 hover:bg-zinc-850 active:scale-95 border border-zinc-800 rounded-2xl flex items-center space-x-2.5 transition-all text-left"
@@ -8836,9 +9016,9 @@ function Settings({
                             try {
                               const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
                               s.getTracks().forEach(t => t.stop());
-                              alert(appLanguage === 'bn' ? '✅ মাইক্রোফোন অনুমতি সফলভাবে চালু হয়েছে!' : '✅ Microphone permission granted successfully!');
+                              setPermFeedback(appLanguage === 'bn' ? '✅ মাইক্রোফোন অনুমতি সফলভাবে চালু হয়েছে!' : '✅ Microphone permission granted successfully!');
                             } catch (err: any) {
-                              alert(appLanguage === 'bn' ? '⚠️ মাইক্রোফোন পারমিশন দেওয়া সম্ভব হয়নি। ফোনের Settings থেকে Microphone "Allow" করুন।' : '⚠️ Microphone permission denied. Please allow microphone in settings.');
+                              setPermFeedback(appLanguage === 'bn' ? '⚠️ মাইক্রোফোন পারমিশন দেওয়া সম্ভব হয়নি। ফোনের Settings থেকে Microphone "Allow" করুন।' : '⚠️ Microphone permission denied. Please allow microphone in settings.');
                             }
                           }}
                           className="p-3 bg-zinc-900/90 hover:bg-zinc-850 active:scale-95 border border-zinc-800 rounded-2xl flex items-center space-x-2.5 transition-all text-left"
@@ -8862,15 +9042,15 @@ function Settings({
                           onClick={() => {
                             hapticFeedback('medium');
                             if (!navigator.geolocation) {
-                              alert("Geolocation is not supported by your browser");
+                              setPermFeedback("Geolocation is not supported by your browser");
                               return;
                             }
                             navigator.geolocation.getCurrentPosition(
                               () => {
-                                alert(appLanguage === 'bn' ? '✅ লোকেশন অনুমতি সফলভাবে সক্রিয় হয়েছে!' : '✅ Location permission granted!');
+                                setPermFeedback(appLanguage === 'bn' ? '✅ লোকেশন অনুমতি সফলভাবে সক্রিয় হয়েছে!' : '✅ Location permission granted!');
                               },
                               () => {
-                                alert(appLanguage === 'bn' ? '⚠️ লোকেশন অনুমতি দেওয়া সম্ভব হয়নি। ফোনের GPS এবং ব্রাউজার পারমিশন চেক করুন।' : '⚠️ Location access denied.');
+                                setPermFeedback(appLanguage === 'bn' ? '⚠️ লোকেশন অনুমতি দেওয়া সম্ভব হয়নি। ফোনের GPS এবং ব্রাউজার পারমিশন চেক করুন।' : '⚠️ Location access denied.');
                               }
                             );
                           }}
@@ -8897,12 +9077,12 @@ function Settings({
                             if ('Notification' in window) {
                               const perm = await Notification.requestPermission();
                               if (perm === 'granted') {
-                                alert(appLanguage === 'bn' ? '✅ নোটিফিকেশন অনুমতি সফলভাবে চালু হয়েছে!' : '✅ Notifications enabled!');
+                                setPermFeedback(appLanguage === 'bn' ? '✅ নোটিফিকেশন অনুমতি সফলভাবে চালু হয়েছে!' : '✅ Notifications enabled!');
                               } else {
-                                alert(appLanguage === 'bn' ? '⚠️ নোটিফিকেশন অনুমতি বন্ধ আছে।' : '⚠️ Notification permission was not granted.');
+                                setPermFeedback(appLanguage === 'bn' ? '⚠️ নোটিফিকেশন অনুমতি বন্ধ আছে।' : '⚠️ Notification permission was not granted.');
                               }
                             } else {
-                              alert("Notifications not supported on this browser");
+                              setPermFeedback("Notifications not supported on this browser");
                             }
                           }}
                           className="p-3 bg-zinc-900/90 hover:bg-zinc-850 active:scale-95 border border-zinc-850 rounded-2xl flex items-center space-x-2.5 transition-all text-left"
@@ -8916,6 +9096,38 @@ function Settings({
                             </span>
                             <span className="text-[9px] text-amber-400 font-semibold block mt-0.5">
                               {appLanguage === 'bn' ? 'অনুমতি পরীক্ষা' : 'Request Access'}
+                            </span>
+                          </div>
+                        </button>
+
+                        {/* Photos & Videos Trigger */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            hapticFeedback('medium');
+                            try {
+                              const input = document.createElement('input');
+                              input.type = 'file';
+                              input.accept = 'image/*,video/*';
+                              input.onchange = () => {
+                                setPermFeedback(appLanguage === 'bn' ? '✅ ফটো ও ভিডিও গ্যালারি এক্সেস সফল!' : '✅ Photo and video access verified!');
+                              };
+                              input.click();
+                            } catch (e) {
+                              setPermFeedback(appLanguage === 'bn' ? '⚠️ ফাইল বা গ্যালারি অনুমতি ওপেন হয়নি।' : '⚠️ File picker failed.');
+                            }
+                          }}
+                          className="col-span-2 p-3 bg-zinc-900/90 hover:bg-zinc-850 active:scale-95 border border-zinc-800 rounded-2xl flex items-center space-x-2.5 transition-all text-left"
+                        >
+                          <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center flex-shrink-0">
+                            <ImageIcon className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-[11px] font-black text-white block leading-tight">
+                              {appLanguage === 'bn' ? 'ফটো এবং ভিডিও (Photos & Videos)' : 'Photos and Videos Access'}
+                            </span>
+                            <span className="text-[9px] text-purple-400 font-semibold block mt-0.5">
+                              {appLanguage === 'bn' ? 'গ্যালারি ও স্টোরেজ এক্সেস টেস্ট' : 'Test Gallery & Storage Access'}
                             </span>
                           </div>
                         </button>
@@ -8946,7 +9158,7 @@ function Settings({
                           localStorage.setItem('world_server_channel', 'true');
                           localStorage.setItem('world_google_cdn', 'true');
 
-                          alert(
+                          setPermFeedback(
                             appLanguage === 'bn'
                               ? "✅ অভিনন্দন! সমস্ত ডিভাইস হার্ডওয়্যার পারমিশন ও ক্লাউড সিঙ্ক সফলভাবে যাচাই ও সক্রিয় করা হয়েছে!"
                               : "✅ Success! All device hardware permissions and cloud sync channels have been granted and activated!"
@@ -10110,6 +10322,7 @@ function WorldPostCard({
   const holdTimeoutRef = useRef<any>(null);
   const hasTriggeredLongPress = useRef(false);
   const [likeCount, setLikeCount] = useState(video.likeCount || 0);
+  const [isLikeAnimating, setIsLikeAnimating] = useState(false);
   const [commentCount, setCommentCount] = useState(video.commentCount || 0);
   const [viewCount, setViewCount] = useState(video.views || 0);
   const [showComments, setShowComments] = useState(false);
@@ -10149,6 +10362,37 @@ function WorldPostCard({
     }
     return [];
   })();
+
+  // Handle phone back button for comments modal & fullscreen
+  useEffect(() => {
+    if (!showComments) return;
+    try {
+      window.history.pushState({ modal: 'comments' }, '');
+    } catch (e) {}
+
+    const handlePop = () => {
+      setShowComments(false);
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => {
+      window.removeEventListener('popstate', handlePop);
+    };
+  }, [showComments]);
+
+  useEffect(() => {
+    if (!showFullScreen) return;
+    try {
+      window.history.pushState({ modal: 'fullscreen' }, '');
+    } catch (e) {}
+
+    const handlePop = () => {
+      setShowFullScreen(false);
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => {
+      window.removeEventListener('popstate', handlePop);
+    };
+  }, [showFullScreen]);
 
   const showToast = (message: string) => {
     const toast = document.createElement('div');
@@ -10495,6 +10739,8 @@ function WorldPostCard({
   const handleReactionSelect = async (emoji: string) => {
     if (!user || !video.id) return;
     hapticFeedback('medium');
+    setIsLikeAnimating(true);
+    setTimeout(() => setIsLikeAnimating(false), 450);
     setShowReactionPanel(false);
 
     try {
@@ -10538,6 +10784,8 @@ function WorldPostCard({
     if (!user || !video.id) return;
     
     hapticFeedback('heavy');
+    setIsLikeAnimating(true);
+    setTimeout(() => setIsLikeAnimating(false), 450);
     setShowLikeHeart(true);
     setTimeout(() => {
       setShowLikeHeart(false);
@@ -10589,7 +10837,9 @@ function WorldPostCard({
       return;
     }
 
-    hapticFeedback('light');
+    hapticFeedback('medium');
+    setIsLikeAnimating(true);
+    setTimeout(() => setIsLikeAnimating(false), 450);
     const wasLiked = isLiked;
     
     try {
@@ -11465,17 +11715,43 @@ function WorldPostCard({
       <div className="grid grid-cols-3 px-1.5 py-2.5 border-b border-[var(--border-secondary)] text-xs text-[var(--text-secondary)] font-medium select-none text-center">
         {/* Like/Reaction count directly above Like button */}
         <div className="flex flex-col items-center justify-center border-r border-[var(--border-secondary)]/30">
-          <div className="flex items-center gap-1 bg-[var(--bg-secondary)]/20 px-2 py-0.5 rounded-full">
-            <div className="flex items-center -space-x-0.5">
+          <motion.div 
+            animate={isLikeAnimating ? {
+              scale: [1, 1.18, 0.96, 1.05, 1],
+            } : { scale: 1 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="flex items-center gap-1 bg-[var(--bg-secondary)]/20 px-2 py-0.5 rounded-full"
+          >
+            <motion.div 
+              animate={isLikeAnimating ? {
+                scale: [1, 1.25, 1],
+              } : { scale: 1 }}
+              transition={{ duration: 0.3 }}
+              className="flex items-center -space-x-0.5"
+            >
               <div className="w-3.5 h-3.5 bg-gradient-to-br from-blue-500 to-blue-600 rounded-md flex items-center justify-center border border-[var(--bg-card)]">
                 <ThumbsUp className="w-2 h-2 text-white fill-white" />
               </div>
               <div className="w-3.5 h-3.5 bg-gradient-to-br from-rose-500 to-rose-600 rounded-md flex items-center justify-center border border-[var(--bg-card)]">
                 <Heart className="w-2 h-2 text-white fill-white" />
               </div>
-            </div>
-            <span className="font-extrabold text-[11px] text-[var(--text-primary)]">{likeCount || 0}</span>
-          </div>
+            </motion.div>
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span 
+                key={likeCount}
+                initial={{ y: isLiked ? -5 : 5, opacity: 0, scale: 0.8 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: isLiked ? 5 : -5, opacity: 0, scale: 0.8 }}
+                transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                className={cn(
+                  "font-extrabold text-[11px] inline-block",
+                  isLiked ? "text-blue-400" : "text-[var(--text-primary)]"
+                )}
+              >
+                {likeCount || 0}
+              </motion.span>
+            </AnimatePresence>
+          </motion.div>
           <span className="text-[9px] text-[var(--text-secondary)] font-black uppercase tracking-wider mt-1">Reactions</span>
         </div>
 
@@ -11525,7 +11801,7 @@ function WorldPostCard({
 
             return (
               <>
-                <button 
+                <motion.button 
                   onMouseDown={startHold}
                   onMouseUp={endHold}
                   onMouseLeave={endHold}
@@ -11533,20 +11809,33 @@ function WorldPostCard({
                   onTouchEnd={handleTouchEnd}
                   onTouchMove={handleTouchMove}
                   onClick={handleLikeClickWithHold}
+                  whileTap={{ scale: 0.92 }}
                   className={cn(
-                    "w-full flex items-center justify-center space-x-1.5 py-2 hover:bg-[var(--bg-secondary)] rounded-lg transition-all active:scale-95 duration-200 select-none touch-none",
+                    "w-full flex items-center justify-center space-x-1.5 py-2 hover:bg-[var(--bg-secondary)] rounded-lg transition-colors duration-200 select-none touch-none cursor-pointer",
                     activeReact ? activeReact.textClass : ""
                   )}
                 >
-                  {isLiked && selectedReaction ? (
-                    <span className="text-sm select-none mr-0.5 transition-transform scale-110 duration-200">{selectedReaction}</span>
-                  ) : (
-                    <ThumbsUp className={cn("w-4 h-4", isLiked ? "fill-blue-500 " : "fill-none")} />
-                  )}
-                  <span>
+                  <motion.div
+                    animate={isLikeAnimating ? {
+                      scale: [1, 1.4, 0.88, 1.15, 1],
+                      rotate: isLiked ? [0, -14, 14, -6, 0] : [0, 8, -8, 0],
+                    } : { scale: 1, rotate: 0 }}
+                    transition={{ duration: 0.38, ease: "easeOut" }}
+                    className="inline-flex items-center justify-center"
+                  >
+                    {isLiked && selectedReaction ? (
+                      <span className="text-sm select-none mr-0.5">{selectedReaction}</span>
+                    ) : (
+                      <ThumbsUp className={cn("w-4 h-4 transition-colors", isLiked ? "fill-blue-500 text-blue-500" : "fill-none")} />
+                    )}
+                  </motion.div>
+                  <motion.span
+                    animate={isLikeAnimating ? { scale: [1, 1.1, 1] } : { scale: 1 }}
+                    transition={{ duration: 0.25 }}
+                  >
                     {activeReact ? activeReact.label : "Like"}
-                  </span>
-                </button>
+                  </motion.span>
+                </motion.button>
 
                 {/* Floating emoji selection bubble panel */}
                 <AnimatePresence>
@@ -17440,6 +17729,18 @@ function WorldApp() {
   const [isNavVisible, setIsNavVisible] = useState(true);
   const [appLanguage, setAppLanguage] = useState('en');
   const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [exitToast, setExitToast] = useState(false);
+  const lastBackPressRef = useRef(0);
+
+  // Push history state whenever activeTab changes from home
+  useEffect(() => {
+    if (activeTab !== 'home') {
+      try {
+        window.history.pushState({ app: 'warld', screen: activeTab }, '');
+      } catch (e) {}
+    }
+  }, [activeTab]);
+
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
   const [isStandaloneApp, setIsStandaloneApp] = useState(false);
   const [hideInstallBanner, setHideInstallBanner] = useState(() => {
@@ -18365,6 +18666,77 @@ function WorldApp() {
     (window as any).editPost = (v: any) => setEditingPost(v);
     return () => { delete (window as any).editPost; };
   }, []);
+
+  // Mobile Back Button Navigation Management (Prevents accidental app close)
+  useEffect(() => {
+    try {
+      if (!window.history.state || window.history.state?.app !== 'warld') {
+        window.history.replaceState({ app: 'warld', root: true }, '');
+        window.history.pushState({ app: 'warld', screen: 'home' }, '');
+      }
+    } catch (e) {}
+
+    const handlePopState = (e: PopStateEvent) => {
+      // 1. If custom confirmation/prompt dialog is open
+      if (customDialog) {
+        setCustomDialog(null);
+        try { window.history.pushState({ app: 'warld', screen: activeTab }, ''); } catch (err) {}
+        return;
+      }
+
+      // 2. If install guide modal is open
+      if (showInstallHelp) {
+        setShowInstallHelp(false);
+        try { window.history.pushState({ app: 'warld', screen: activeTab }, ''); } catch (err) {}
+        return;
+      }
+
+      // 3. If post editing modal is open
+      if (editingPost) {
+        setEditingPost(null);
+        try { window.history.pushState({ app: 'warld', screen: activeTab }, ''); } catch (err) {}
+        return;
+      }
+
+      // 4. If settings modal is open
+      if (globalShowSettings) {
+        setGlobalShowSettings(false);
+        try { window.history.pushState({ app: 'warld', screen: activeTab }, ''); } catch (err) {}
+        return;
+      }
+
+      // 5. If auth modal is open
+      if (authModal) {
+        setAuthModal(null);
+        try { window.history.pushState({ app: 'warld', screen: activeTab }, ''); } catch (err) {}
+        return;
+      }
+
+      // 6. If user is inside any secondary tab (profile, friends, marketplace, inbox, messages, shop, search, upload)
+      if (activeTab !== 'home') {
+        setActiveTab('home');
+        try { window.history.pushState({ app: 'warld', screen: 'home' }, ''); } catch (err) {}
+        return;
+      }
+
+      // 7. User is on 'home' feed: Double tap back to exit mechanism
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        // Confirmed second tap within 2 seconds: Allow app / PWA to exit
+        return;
+      }
+
+      // First tap on home: Intercept, push state back, show toast & haptic
+      lastBackPressRef.current = now;
+      try { window.history.pushState({ app: 'warld', screen: 'home' }, ''); } catch (err) {}
+      hapticFeedback('medium');
+      setExitToast(true);
+      setTimeout(() => setExitToast(false), 2000);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeTab, customDialog, showInstallHelp, editingPost, globalShowSettings, authModal]);
   const preUploadTasksRef = useRef<Record<string, { promise: Promise<string>, status: string, progress: number }>>({});
   const activeTasksRef = useRef<Record<string, { cancel: () => void }>>({});
   const uploadSourceFilesRef = useRef<Record<string, File>>({});
@@ -19096,7 +19468,7 @@ function WorldApp() {
           </div>
         )}
         <main className="flex-1 overflow-hidden relative">
-          {!user ? (
+          {!user && !isGuestBrowsing ? (
             <AuthForm type="login" isBlocking={true} />
           ) : (
             <>
@@ -19219,7 +19591,7 @@ function WorldApp() {
         </main>
 
         <AnimatePresence>
-          {isNavVisible && !!user && (
+          {isNavVisible && (!!user || isGuestBrowsing) && (
             <motion.div
               initial={{ y: 80 }}
               animate={{ y: 0 }}
@@ -19315,6 +19687,26 @@ function WorldApp() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Press back again to exit Toast notification */}
+      <AnimatePresence>
+        {exitToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 30, scale: 0.92 }}
+            transition={{ type: "spring", stiffness: 450, damping: 25 }}
+            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[10001] px-5 py-2.5 rounded-full bg-zinc-900/95 border border-zinc-700/80 text-white text-xs font-black shadow-2xl backdrop-blur-md flex items-center space-x-2 pointer-events-none"
+          >
+            <span className="text-sm">👋</span>
+            <span>
+              {appLanguage === 'bn' 
+                ? 'অ্যাপ থেকে বের হতে আবার ব্যাক বাটন চাপুন' 
+                : 'Press back again to exit'}
+            </span>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
