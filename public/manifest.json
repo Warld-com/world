@@ -1,0 +1,66 @@
+{
+  "name": "warld",
+  "short_name": "warld",
+  "description": "A high-performance short video social platform with professional profile management, privacy controls, and content sharing.",
+  "categories": ["social", "entertainment", "video"],
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay", "fullscreen"],
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait",
+  "dir": "ltr",
+  "lang": "en",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "./screenshot-mobile.png",
+      "sizes": "768x1376",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Mobile Feed"
+    },
+    {
+      "src": "./screenshot-desktop.png",
+      "sizes": "1376x768",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Desktop Feed"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Home",
+      "url": "./",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}
